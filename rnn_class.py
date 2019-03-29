@@ -32,7 +32,6 @@ char_to_ix = {ch:i for i, ch in enumerate(chars)}
 ix_to_char = {i:ch for i, ch in enumerate(chars)}
 
 
-
 class SimpleRNN(object):
 	"""
 	Simple Vanilla RNN class that creates 3 layer RNN, input->hidden->output
@@ -56,7 +55,6 @@ class SimpleRNN(object):
 		self.b_y = np.zeros((self.vocab_size,1))
 
 		### Hidden state memory ###
-		self.hidden_state_memory = {}
 		self.hprev = np.zeros((hidden_size,1)) # most recent memory
 
 
@@ -70,6 +68,7 @@ class SimpleRNN(object):
 		self.char_to_ix = {ch:i for i, ch in enumerate(vocab)}
 		self.ix_to_char = {i:ch for i, ch in enumerate(vocab)}
 
+
 	def feedforward(self, a, t):
 		"""
 		Return the output vector if the "a" vector is given as input.
@@ -79,23 +78,22 @@ class SimpleRNN(object):
 			Needs to be the size of the first (input) layer of the Network
 		t: time or position in sequence
 		"""
-		hidden_state = tanh(np.dot(W_xh, a) + np.dot(W_hh, hidden_state_memory[t-1]))
-		self.hidden_state_memory[t] = hidden_state # update our memory of the hidden state at time t
-		output = np.dot(W_hy, hidden_state)
+		hidden_state = tanh(np.dot(self.W_xh, a) + np.dot(self.W_hh, self.hprev[t-1]))
+		output = np.dot(self.W_hy, hidden_state)
 		return output
+
 
 	def SGD(self, epochs):
 		"""
 		Stochastic (sequence) gradient descent training RNN for the sequence starting from position pos
 		in the data
 		"""
-
 		epoch = 0
 		pos = 0
 		# smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at epoch 0
 
 		for epoch in xrange(epochs):
-
+			# Reset if necessary
 			if pos+self.sequence_length+1 >= len(self.data) or epoch == 0:
 				hprev = np.zeros((hidden_size,1)) # reset RNN memory
 				p = 0 # go from start of data
@@ -103,10 +101,7 @@ class SimpleRNN(object):
 			inputs = [self.char_to_ix[ch] for ch in self.data[pos:pos+seq_length]]
 			targets = [self.char_to_ix[ch] for ch in self.data[pos+1:pos+seq_length+1]]
 
-
-
-
-
+			nabla_W_xh, nabla_W_hh, nabla_W_hy, nabla_b_h, nabla_b_y, latest_hidden_state = self.backprop()
 
 			# Update the parameters using the gradients we have computed using backpropagation
 			# Here we use the classic gradient descent update rule (though adagrad is wonderful here)
@@ -116,9 +111,60 @@ class SimpleRNN(object):
 	        self.b_h += -(learning_rate/sequence_length) * nabla_b_h
 	        self.b_y += -(learning_rate/sequence_length) * nabla_b_y
 
+	        # update the pointer to latest hidden memory state
+	        self.hprev = latest_hidden_state
+
 	        # Print progress 
 	        smooth_loss = smooth_loss * 0.999 + loss * 0.001
-	        if epoch % 100 == 0: print 'epoch %d, loss: %f' % (epoch, smooth_loss) # print progress
+	        if epoch % 10 == 0: 
+	        	print 'epoch %d, loss: %f' % (epoch, smooth_loss) # print progress
+
+	def backprop(self, inputs, targets):
+		"""
+		The backpropagation algorithm used to find the gradients of the parameters of the model.
+		"""
+		xs, hs, ys, ps = {}, {}, {}, {}
+		hs[-1] = np.copy(self.hprev)
+		loss = 0
+
+		nabla_W_xh, nabla_W_hh, nabla_W_hy = np.zeros_like(self.W_xh), np.zeros_like(self.W_hh), np.zeros_like(self.W_hy)
+		nabla_b_h, nabla_b_y = np.zeros_like(self.b_h), np.zeros_like(self.b_y)	
+
+		# Forward Pass
+		##################
+		for t in xrange(len(inputs)):
+			# propagate and record all activations for the length of sequence we are looking at
+			xs[t] = make_one_hot_enc(inputs[t])
+			hs[t] = tanh(np.dot(self.W_xh, xs[t]) + np.dot(self.W_hh, hs[t-1]) + self.b_h)
+			ys[t] = np.dot(self.W_hy, hs[t]) + self.b_y
+			ps[t] = np.exp(ys[t])/np.sum(np.exp(ys[t]))
+			loss += -np.log(ps[t][targets[t],0]) # Cross Entropy Loss
+
+		# Backward Pass
+		##################
+		dhnext = np.zeros_like(hs[0])
+		for t in reversed(xrange(len(inputs))):
+			# backprop of output
+			delta_y = np.copy(ps[t])
+			delta_y[targets[t]] -= 1
+			nabla_W_hy += np.dot(delta_y, hs[t].T)
+			nabla_b_y += delta_y
+
+			# backprop into h
+			delta_h = np.dot(self.W_hy.T, delta_y) + dhnext
+			delta_hraw = tanh_prime(hs[t]) * delta_h
+			nabla_W_hh += np.dot(delta_hraw, hs[t-1].T)
+			nabla_b_h += delta_hraw
+			dhnext = np.dot(self.W_hh.T, delta_hraw)
+
+			# Backprop towards x (only the weights of course)
+			nabla_W_xh += np.dot(delta_hraw, xs[t].T)
+
+			# ONLY IF YOU GOT EXPLODING GRADIENTS
+			# for dparam in [nabla_W_xh, nabla_W_hh, nabla_W_hy, nabla_b_h, nabla_b_y]:
+			# 	np.clip(dparam, -5, 5, out=dparam)
+
+		return nabla_W_xh, nabla_W_hh, nabla_W_hy, nabla_b_h, nabla_b_y, hs[len(inputs)-1]
 
 	def sample(self, seed_char, n):
 		"""
