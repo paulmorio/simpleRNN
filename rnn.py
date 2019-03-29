@@ -1,4 +1,8 @@
 """
+rnn.py
+author: paulmorio (Paul Scherer) original by Andrej Karpathy
+date: March 2019
+
 This is a very minimal vanilla implementation of an RNN using Python and Numpy
 It will make predictions of next character given text.
 
@@ -29,7 +33,6 @@ ix_to_char = {i:ch for i, ch in enumerate(chars)}
 hidden_size = 100 # size of hidden layer of neurons
 seq_length = 25 # number of steps to unroll the RNN for
 learning_rate = 1e-1 # eta
-
 
 
 # Model parameters
