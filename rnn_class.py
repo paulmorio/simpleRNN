@@ -1,12 +1,20 @@
 """
+rnn_class.py
+author: paulmorio (Paul Scherer)
+date: March 2019
+
 A minimal RNN class written only using Python and Numpy for expositional purposes.
 Compare this with the rnn.py code (a refactored version of andrej karpathy's code)
+
+Hint: One of the differences is that we dont use Adagrad to make distinguishing from
+adagrad memory and "memory" in the RNN easier.
 
 It is highly trimmed down, but has all the right basics (and also great for showing
 off the vanishing gradient problem)
 
 It is trained using gradient descent, with gradients being found using standard 
-backpropagation with a quadratic cost function and a tanh activation function.
+backpropagation with a cross entropy cost function and a tanh activation function
+for each of the neurons.
 """
 
 import random
@@ -49,7 +57,8 @@ class SimpleRNN(object):
 
 		### Hidden state memory ###
 		self.hidden_state_memory = {}
-		self.hidden_state_memory[-1] = np.zeros((hidden_size,1)) # initial first memory
+		self.hprev = np.zeros((hidden_size,1)) # most recent memory
+
 
 		### Hyperparameters ###
 		self.hidden_layer_size = hidden_layer_size
@@ -60,7 +69,6 @@ class SimpleRNN(object):
 		# Mainly helpful rather than necessary (especially for sampling from our network)
 		self.char_to_ix = {ch:i for i, ch in enumerate(vocab)}
 		self.ix_to_char = {i:ch for i, ch in enumerate(vocab)}
-
 
 	def feedforward(self, a, t):
 		"""
@@ -76,13 +84,41 @@ class SimpleRNN(object):
 		output = np.dot(W_hy, hidden_state)
 		return output
 
-	def SGD(self, epochs, test=False):
+	def SGD(self, epochs):
 		"""
-		Stochastic gradient descent training RNN for the sequence starting from position pos
+		Stochastic (sequence) gradient descent training RNN for the sequence starting from position pos
 		in the data
 		"""
-		inputs = [self.char_to_ix[ch] for ch in self.data[pos:pos+seq_length]]
-		targets = [self.char_to_ix[ch] for ch in self.data[pos+1:pos+seq_length+1]]
+
+		epoch = 0
+		pos = 0
+		# smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at epoch 0
+
+		for epoch in xrange(epochs):
+
+			if pos+self.sequence_length+1 >= len(self.data) or epoch == 0:
+				hprev = np.zeros((hidden_size,1)) # reset RNN memory
+				p = 0 # go from start of data
+
+			inputs = [self.char_to_ix[ch] for ch in self.data[pos:pos+seq_length]]
+			targets = [self.char_to_ix[ch] for ch in self.data[pos+1:pos+seq_length+1]]
+
+
+
+
+
+
+			# Update the parameters using the gradients we have computed using backpropagation
+			# Here we use the classic gradient descent update rule (though adagrad is wonderful here)
+	        self.W_xh += -(learning_rate/sequence_length) * nabla_W_xh 
+	        self.W_hh += -(learning_rate/sequence_length) * nabla_W_hh 
+	        self.W_hy += -(learning_rate/sequence_length) * nabla_W_hy 
+	        self.b_h += -(learning_rate/sequence_length) * nabla_b_h
+	        self.b_y += -(learning_rate/sequence_length) * nabla_b_y
+
+	        # Print progress 
+	        smooth_loss = smooth_loss * 0.999 + loss * 0.001
+	        if epoch % 100 == 0: print 'epoch %d, loss: %f' % (epoch, smooth_loss) # print progress
 
 	def sample(self, seed_char, n):
 		"""
@@ -93,8 +129,7 @@ class SimpleRNN(object):
 
 		for t in xrange(n):
 			# Predict the next letter
-			most_recent_memory_t = max(self.hidden_state_memory.keys())
-			h = tanh(np.dot(self.W_xh, x) + np.dot(self.W_hh, self.hidden_state_memory[most_recent_memory_t]))
+			h = tanh(np.dot(self.W_xh, x) + np.dot(self.W_hh, self.hprev))
 			y = np.dot(self.W_hy, h) + self.b_y
 			y_probs = np.exp(y)/np.sum(np.exp(y)) # Softmax
 			predicted_ix = np.random.choice(range(self.vocab_size), p=p.ravel())
@@ -107,7 +142,6 @@ class SimpleRNN(object):
 		sample_text = "".join(self.ix_to_char[ix] for ix in sampled_ixs)
 		print "-------------\n %s \n---------------" % (sample_text)
 
-
 	def make_one_hot_enc(self, char):
 		"""
 		Returns a one hot encoding of the character given the models vocab
@@ -116,11 +150,6 @@ class SimpleRNN(object):
 		seed_index = char_to_ix[seed_char]
 		x[seed_index] = 1
 		return x
-
-
-
-
-
 
 
 # Static Functions
