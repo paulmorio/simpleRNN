@@ -12,3 +12,5 @@ Reviewing Key Concepts and Preparing materials to teach in Class.
 For character level text generation.
 - Vanilla RNN implementation
 - Vanilla LSTM 
+
+
