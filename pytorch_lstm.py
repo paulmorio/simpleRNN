@@ -70,5 +70,5 @@ class NaiveCustomLSTM(nn.Module):
 
 		# reshape hidden_seq
 		hidden_seq = torch.cat(hidden_seq, dim=0)
-
-		return (hidden_seq, (h_t, c_t))
+		hidden_seq = hidden_seq.transpose(0, 1).contiguous()
+		return hidden_seq, (h_t, c_t)
